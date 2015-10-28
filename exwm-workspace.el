@@ -161,6 +161,21 @@ The optional FORCE option is for internal use only."
                            :window exwm--root :data index))
         (xcb:flush exwm--connection)))))
 
+;;;###autoload
+(defun exwm-workspace-switch-nth (n)
+  "Switch to N workspace.
+
+Use like:
+   (exwm-input-set-key (kbd \"H-1\") 'exwm-workspace-switch-nth)
+   (exwm-input-set-key (kbd \"H-0\") 'exwm-workspace-switch-nth)
+   ...
+"
+  (interactive
+   (let* ((chr (logand last-command-event ?\177))
+          (cn (- chr ?0)))
+     (list cn)))
+  (exwm-workspace-switch n))
+
 (defun exwm-workspace--on-focus-in ()
   "Fix unexpected frame switch."
   (let ((index (cl-position (selected-frame) exwm-workspace--list)))

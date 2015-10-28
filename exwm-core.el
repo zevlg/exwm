@@ -96,6 +96,7 @@
 (defvar-local exwm-transient-for nil "WM_TRANSIENT_FOR.")
 (defvar-local exwm--protocols nil)
 (defvar-local exwm-state nil "WM_STATE.")
+(defvar-local exwm--plist nil)
 ;; _NET_WM_NORMAL_HINTS
 (defvar-local exwm--normal-hints-x nil)
 (defvar-local exwm--normal-hints-y nil)
@@ -148,6 +149,19 @@
         left-fringe-width 0
         right-fringe-width 0
         vertical-scroll-bar nil))
+
+
+;;; Working with properties
+(defsubst exwm--get-prop (prop)
+  (plist-get exwm--plist pop))
+
+(defsubst exwm--rem-prop (prop)
+  (setf exwm--plist (cl--do-remf exwm--plist prop)))
+
+(defsubst exwm--put-prop (prop val)
+  (if val
+      (setf exwm--plist (plist-put exwm--plist prop val))
+    (exwm--rem-prop prop)))
 
 
 

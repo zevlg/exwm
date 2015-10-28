@@ -81,6 +81,7 @@
 (require 'exwm-floating)
 (require 'exwm-manage)
 (require 'exwm-input)
+(require 'exwm-match)
 
 (defun exwm-reset ()
   "Reset window to standard state: non-fullscreen, line-mode."

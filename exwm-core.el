@@ -154,7 +154,7 @@
 
 ;;; Working with properties
 (defsubst exwm--get-prop (prop)
-  (plist-get exwm--plist pop))
+  (plist-get exwm--plist prop))
 
 (defsubst exwm--rem-prop (prop)
   (setf exwm--plist (cl--do-remf exwm--plist prop)))

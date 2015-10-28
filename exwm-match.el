@@ -26,7 +26,9 @@
 
 ;;; Commentary:
 
-;;; Qualification
+;; Module to match X clients managed by exwm
+
+;;; Code:
 
 (defvar exwm--qualifiers nil "List of qualifiers.")
 
@@ -34,10 +36,9 @@
   "Define new qualifier named by NAME.
 DOC - Documentation for matcher.
 PREDICATE - Function to call with single argument - PARAM."
-  `(setq exwm--qualifiers
-         (cons (cons (quote ,name)
-                     (list ,doc #'(lambda ,args ,@body)))
-               exwm--qualifiers)))
+  `(push (cons (quote ,name)
+               (list ,doc #'(lambda ,args ,@body)))
+         exwm--qualifiers))
 
 ;;;###exwm-autoload
 (defun exwm--match-p (qualifier &optional buf)
@@ -102,6 +103,12 @@ Here is QUALIFIER format in EBNF:
       (and exwm-title
            (string-match param exwm-title))))
 
+(define-exwm-qualifier workspace (param)
+  "Return non-nil if buffer's workspace is PARAM.
+Null PARAM matches any workspace."
+  (or (null param)
+      (eq param exwm--frame)))
+
 (define-exwm-qualifier command (param)
   "Return non-nil if PARAM matches WM_COMMAND."
   (or (null param)
@@ -138,6 +145,10 @@ Predicate called without arguments."
   "Return non-nil if buffer's major-mode is PARAM."
   (eq major-mode param))
 
+(define-exwm-qualifier exwm-mode (param)
+  "Return non-nil if buffer in `exwm-mode'."
+  (eq major-mode 'exwm-mode))
+
 (define-exwm-qualifier buffer-name (param)
   "Return non-nil if buffer's name matches PARAM."
   (string-match param (buffer-name)))
@@ -155,23 +166,33 @@ Predicate called without arguments."
               (class-inst ,(concat "^" exwm-instance-name "$")))
       `(buffer-major-mode ,major-mode))))
 
+(defun exwm--list (qual &optional buffers)
+  "List buffers matching qualifier QUAL."
+  (remove-if-not #'(lambda (buf)
+                     (exwm--match-p qual buf))
+                 (or buffers (buffer-list))))
+
+(defun exwm--x-list (qual)
+  "List only X clients buffers matching QUAL.
+Fast version of `exwm--list' when many buffers are open."
+  (exwm--list qual (mapcar #'cdr exwm--id-buffer-alist)))
+
+(defun exwm--nth-arg (arg nlist &optional el)
+  (when (< arg 0)
+    (setq nlist (nreverse nlist))
+    (setq arg (- arg)))
+
+  (while (> arg 0)
+    (setq el (or (cadr (memq el nlist)) (car nlist)))
+    (decf arg))
+  el)
+
 ;;;###autoload
 (defun exwm--forward-app (arg)
   (interactive "p")
-  (let* ((cqual (exwm--guest-qualifier))
-         (bufs (remove-if-not
-                #'(lambda (buf)
-                    (exwm--match-p cqual buf))
-                (buffer-list)))
-         (buf (current-buffer)))
-    (when (< arg 0)
-      (setq bufs (nreverse bufs))
-      (setq arg (- arg)))
-    (while (> arg 0)
-      (setq buf (or (cadr (memq buf bufs)) (car bufs)))
-      (decf arg))
-    
-    (switch-to-buffer buf)))
+  (switch-to-buffer
+   (exwm--nth-arg arg (exwm--list (exwm--guest-qualifier))
+                  (current-buffer))))
 
 ;;;###autoload
 (defun exwm--backward-app (arg)

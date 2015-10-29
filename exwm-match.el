@@ -177,16 +177,6 @@ Predicate called without arguments."
 Fast version of `exwm--list' when many buffers are open."
   (exwm--list qual (mapcar #'cdr exwm--id-buffer-alist)))
 
-(defun exwm--nth-arg (arg nlist &optional el)
-  (when (< arg 0)
-    (setq nlist (nreverse nlist))
-    (setq arg (- arg)))
-
-  (while (> arg 0)
-    (setq el (or (cadr (memq el nlist)) (car nlist)))
-    (decf arg))
-  el)
-
 ;;;###autoload
 (defun exwm--forward-app (arg)
   (interactive "p")

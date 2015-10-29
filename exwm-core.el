@@ -35,8 +35,9 @@
 
 (defmacro exwm--log (format-string &rest args)
   "Print debug message."
-  `(when exwm-debug-on
-     (message ,(concat "[EXWM] " format-string) ,@args)))
+  (when exwm-debug-on
+    `(when exwm-debug-on
+       (message ,(concat "[EXWM] " format-string) ,@args))))
 
 (defvar exwm--connection nil "X connection.")
 (defvar exwm--root nil "Root window.")

@@ -87,7 +87,7 @@
 (defun exwm-wconf-remove ()
   "Remove selected window configuration from wconf list."
   (interactive)
-  (setf (exwm-wconf--list) (delq wsel (exwm-wconf--list))
+  (setf (exwm-wconf--list) (delq (exwm-wconf--selected) (exwm-wconf--list))
         (exwm-wconf--selected) nil)
 
   (run-hook-with-args 'exwm-wconf-switch-hook))
@@ -168,11 +168,16 @@ If ARG is given, then transpose with previous one."
                (char-to-string #x2502))))
 
 (defun exwm-wconf--tabs-refresh ()
-  "Refresh header-mode-line"
-  (if (memq (selected-window)
-            (mapcar #'cadr (exwm-wconf--list)))
-      (setq-local header-line-format exwm-wconf--header-line-format)
-    (setq-local header-line-format nil)))
+  "Refresh header-mode-line, show header-line only in topmost window."
+  (let* ((fwin (frame-first-window))
+         (wbuf (window-buffer fwin)))
+
+    (mapc #'(lambda (w)
+              (with-current-buffer (window-buffer w)
+                (if (eq (current-buffer) wbuf)
+                    (setq-local header-line-format exwm-wconf--header-line-format)
+                  (setq-local header-line-format nil))))
+          (window-list))))
 
 ;;;###autoload
 (defun exwm-wconf-tabs-mode (arg)
@@ -182,13 +187,11 @@ If ARG is given, then transpose with previous one."
       (progn
         (add-hook 'exwm-wconf-switch-hook 'force-mode-line-update)
         (add-hook 'window-configuration-change-hook 'exwm-wconf--tabs-refresh)
-
         (exwm-wconf--tabs-refresh))
 
     (remove-hook 'exwm-wconf-switch-hook 'force-mode-line-update)
     (remove-hook 'window-configuration-change-hook 'exwm-wconf--tabs-refresh)
     ))
-;    (setq-default header-line-format nil)))
   
 
 (provide 'exwm-wconf)

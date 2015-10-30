@@ -49,7 +49,7 @@
 
 (defun exwm-list--set-element (list old-el new-el)
   "In LIST set OLD-EL to NEW-EL."
-  (setcar (memq old-el list) new-el)
+  (setcar (or (memq old-el list) '(dummy)) new-el)
   list)
 
 (defun exwm-list--exchange-els (list el1 el2)

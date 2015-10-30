@@ -23,6 +23,8 @@
 
 ;;; Commentary:
 
+;; To enable tabbing, use:
+;;   (exwm-wconf-tabs-mode 1)
 ;;
 
 ;;; Code:
@@ -55,44 +57,38 @@
    (buffer-local-value 'buffer-display-time (car wc1))))
 
 (defun exwm-wconf--current ()
-  (cons (current-buffer) (winner-conf)))
+  (cons (current-buffer) (cons (selected-window) (winner-conf))))
 
-(defun exwm-wconf--switch (wconf &optional fast-p)
+(defun exwm-wconf--switch (wconf)
   "Switch to WCONF."
   (unless (eq wconf (exwm-wconf--selected))
-    (unless fast-p
-      (set-window-configuration (cadr wconf)))
+    ;; If switching to new wconf then simple push, otherwise need to
+    ;; update selected wconf
+    (if (memq wconf (exwm-wconf--list))
+        (exwm-list--set-element
+         (exwm-wconf--list) (exwm-wconf--selected) (exwm-wconf--current))
+      (pushnew wconf (exwm-wconf--list)))
 
+    (set-window-configuration (caddr wconf))
+    ;; `set-window-buffer' updates buffer-display-time!
+    (set-window-buffer (selected-window) (car wconf))
     (setf (exwm-wconf--selected) wconf)
-    (run-hook-with-args 'exwm-wconf-switch-hook wconf)))
 
-(defun exwm-wconf--update ()
-  "Update current wconf.
-Do nothing if no wconf is currently selected."
-  (let ((wconf (exwm-wconf--selected)))
-    (when wconf
-      (let ((newwc (exwm-wconf--current)))
-        (exwm-list--set-element (exwm-wconf--list) wconf newwc)
-        (exwm-wconf--switch newwc :fast)))))
+    (run-hook-with-args 'exwm-wconf-switch-hook wconf)))
 
 
 ;;;###autoload
 (defun exwm-wconf-push ()
   "Push current window configuration to list."
   (interactive)
-
-  (let ((wconf (exwm-wconf--current)))
-    (push wconf (exwm-wconf--list))
-
-    ;; Switch to newly created wconf
-    (exwm-wconf--switch wconf)))
+  (exwm-wconf--switch (exwm-wconf--current)))
 
 ;;;###autoload
 (defun exwm-wconf-remove ()
   "Remove selected window configuration from wconf list."
   (interactive)
-  (setf (exwm-wconf--list)
-        (delq (exwm-wconf--selected) (exwm-wconf--list)))
+  (setf (exwm-wconf--list) (delq wsel (exwm-wconf--list))
+        (exwm-wconf--selected) nil)
 
   (run-hook-with-args 'exwm-wconf-switch-hook))
 
@@ -101,19 +97,17 @@ Do nothing if no wconf is currently selected."
   "Switch to ARG next wconf."
   (interactive "p")
 
-  (let ((wc (exwm-wconf--selected))
-        (cws (exwm-wconf--list))
+  (let ((wsel (exwm-wconf--selected))
+        (wcs (exwm-wconf--list))
         wcinx num nwc)
-    (unless cws
+    (unless wcs
       (user-error "[EXWM] No wconfs, use M-x exwm-wconf-push RET"))
 
-    (setq wcinx (- (length cws) (length (memq wc cws))))
-    (setq num (% (+ wcinx arg) (length cws)))
-    (setq nwc (nth (if (natnump num) num (+ (length cws) num)) cws))
+    (setq wcinx (- (length wcs) (length (memq wsel wcs))))
+    (setq num (% (+ wcinx arg) (length wcs)))
+    (setq nwc (nth (if (natnump num) num (+ (length wcs) num)) wcs))
 
-    (unless (eq wc nwc)
-      (exwm-wconf-update)
-      (exwm-wconf--switch nwc))))
+    (exwm-wconf--switch nwc)))
 
 ;;;###autoload
 (defun exwm-wconf-prev (arg)
@@ -129,10 +123,7 @@ Do nothing if no wconf is currently selected."
          (wsel (exwm-wconf--selected))
          (nwc (exwm--nth-arg arg wcs wsel)))
 
-    (message "BUFS: %s" (mapcar 'buffer-name (mapcar 'car wcs)))
-    (unless (eq wsel nwc)
-      (exwm-wconf-update)
-      (exwm-wconf--switch (exwm--nth-arg arg wcs wsel)))))
+    (exwm-wconf--switch (exwm--nth-arg arg wcs wsel))))
 
 ;;;###autoload
 (defun exwm-wconf-transpose (arg)
@@ -146,6 +137,59 @@ If ARG is given, then transpose with previous one."
       (exwm-list--exchange-els wcs wsel tai)
       (run-hook-with-args 'exwm-wconf-switch-hook))))
 
+;;; Tabbing
+(defvar exwm-wconf--tabs-enabled nil)
+
+(defface exwm-wconf-active-face
+  '((t :inherit header-line
+       :background "#008a00"
+       :weight bold
+     ))
+  "Face for active wconf."
+  :group 'exwm-wconf)
+
+(defvar exwm-wconf--header-line-format '("%e" (:eval (exwm-wconf--header-line))))
+
+(defun exwm-wconf--header-line ()
+  "Generate header line format for current wconf."
+  (let* ((wcs (exwm-wconf--list))
+         (wsel (exwm-wconf--selected))
+         (wpsize (window-pixel-width))
+         (hlsize (window-font-width nil 'header-line))
+         (tsize (/ (/ wpsize hlsize) (length wcs))))
+    (mapconcat 'identity
+               (mapcar #'(lambda (wc)
+                           (let ((fs (format (format " %%-%ds" (1- tsize))
+                                             (buffer-name (if (eq wc wsel) (current-buffer) (car wc))))))
+                             (if (eq wc wsel)
+                                 (propertize fs 'face 'exwm-wconf-active-face)
+                               fs)))
+                       wcs)
+               (char-to-string #x2502))))
+
+(defun exwm-wconf--tabs-refresh ()
+  "Refresh header-mode-line"
+  (if (memq (selected-window)
+            (mapcar #'cadr (exwm-wconf--list)))
+      (setq-local header-line-format exwm-wconf--header-line-format)
+    (setq-local header-line-format nil)))
+
+;;;###autoload
+(defun exwm-wconf-tabs-mode (arg)
+  "Toggle tabbing mode."
+  (interactive "p")
+  (if (> arg 0)
+      (progn
+        (add-hook 'exwm-wconf-switch-hook 'force-mode-line-update)
+        (add-hook 'window-configuration-change-hook 'exwm-wconf--tabs-refresh)
+
+        (exwm-wconf--tabs-refresh))
+
+    (remove-hook 'exwm-wconf-switch-hook 'force-mode-line-update)
+    (remove-hook 'window-configuration-change-hook 'exwm-wconf--tabs-refresh)
+    ))
+;    (setq-default header-line-format nil)))
+  
 
 (provide 'exwm-wconf)
 

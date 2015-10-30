@@ -76,6 +76,13 @@
 
     (run-hook-with-args 'exwm-wconf-switch-hook wconf)))
 
+(defun exwm-wconf-pop-to-buffer (buf)
+  "Switch to wconf where current buffer is BUF."
+  (let ((wc (find buf (exwm-wconf--list) :key 'car)))
+    (if wc
+        (exwm-wconf--switch wc)
+      (switch-to-buffer buf))))
+
 
 ;;;###autoload
 (defun exwm-wconf-push ()
@@ -126,6 +133,12 @@
     (exwm-wconf--switch (exwm--nth-arg arg wcs wsel))))
 
 ;;;###autoload
+(defun exwm-wconf-restore-buffer ()
+  "Switch to buffer saved in selected wconf."
+  (interactive)
+  (switch-to-buffer (car (exwm-wconf--selected))))
+
+;;;###autoload
 (defun exwm-wconf-transpose (arg)
   "Transpose selected wconf with the next one.
 If ARG is given, then transpose with previous one."
@@ -141,8 +154,7 @@ If ARG is given, then transpose with previous one."
 (defvar exwm-wconf--tabs-enabled nil)
 
 (defface exwm-wconf-active-face
-  '((t :inherit header-line
-       :background "#008a00"
+  '((t :inherit mode-line               ; inherit background color
        :weight bold
      ))
   "Face for active wconf."
@@ -162,10 +174,13 @@ If ARG is given, then transpose with previous one."
                            (let ((fs (format (format " %%-%ds" (1- tsize))
                                              (buffer-name (if (eq wc wsel) (current-buffer) (car wc))))))
                              (if (eq wc wsel)
-                                 (propertize fs 'face 'exwm-wconf-active-face)
+                                 (concat 
+                                  (if (eq (car wc) (current-buffer)) ""
+                                    (propertize " \u2731" 'face '(error exwm-wconf-active-face)))
+                                  (propertize fs 'face 'exwm-wconf-active-face))
                                fs)))
                        wcs)
-               (char-to-string #x2502))))
+               "\u2502")))
 
 (defun exwm-wconf--tabs-refresh ()
   "Refresh header-mode-line, show header-line only in topmost window."
@@ -177,7 +192,7 @@ If ARG is given, then transpose with previous one."
                 (if (eq (current-buffer) wbuf)
                     (setq-local header-line-format exwm-wconf--header-line-format)
                   (setq-local header-line-format nil))))
-          (window-list))))
+          (window-list nil 0))))
 
 ;;;###autoload
 (defun exwm-wconf-tabs-mode (arg)
@@ -192,7 +207,7 @@ If ARG is given, then transpose with previous one."
     (remove-hook 'exwm-wconf-switch-hook 'force-mode-line-update)
     (remove-hook 'window-configuration-change-hook 'exwm-wconf--tabs-refresh)
     ))
-  
+
 
 (provide 'exwm-wconf)
 

@@ -33,6 +33,11 @@
   "Normal hook run after a window is just managed, in the context of the
 corresponding buffer.")
 
+(defvar exwm-manage-switch-on-maprequest
+  #'(lambda (id)
+      (exwm--log "#x%x is already managed" id))
+  "Function to call to switch to client that requested MapRequest in runtime.")
+
 (defun exwm-manage--update-geometry (id &optional force)
   "Update window geometry."
   (with-current-buffer (exwm--id->buffer id)
@@ -360,7 +365,7 @@ corresponding buffer.")
     (xcb:unmarshal obj data)
     (with-slots (parent window) obj
       (if (assoc window exwm--id-buffer-alist)
-          (exwm--log "#x%x is already managed" id)
+          (funcall exwm-manage-switch-on-maprequest window)
         (if (/= exwm--root parent)
             (progn (xcb:+request exwm--connection
                        (make-instance 'xcb:MapWindow :window window))

@@ -231,9 +231,14 @@ corresponding buffer.")
         (let ((kill-buffer-query-functions nil)
               (floating exwm--floating-frame))
           (kill-buffer)
-          (when floating
-            (select-window
-             (frame-selected-window exwm-workspace--current))))))))
+          
+          (if floating
+              (select-window
+               (frame-selected-window exwm-workspace--current))
+
+            (let ((rcbuf (car (frame-parameter (selected-frame) 'buffer-list))))
+              (when (buffer-live-p rcbuf)
+                (switch-to-buffer rcbuf)))))))))
 
 (defun exwm-manage--scan ()
   "Search for existing windows and try to manage them."

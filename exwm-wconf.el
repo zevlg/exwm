@@ -27,6 +27,10 @@
 ;;   (exwm-wconf-tabs-mode 1)
 ;;
 
+;;: TODO:
+;; 
+;;  * When wconf's buffer is killed - kill wconf as well.
+
 ;;; Code:
 (require 'exwm-core)
 (require 'exwm-misc)
@@ -36,6 +40,10 @@
   "Functions to run when wconf is switched to."
   :type 'hook
   :group 'exwm-wconf)
+
+(defvar exwm-wconf-autoupdate-predicate nil
+  "Predicate to run in order to decide update wconf on switch or not."
+  )
 
 
 (defun exwm-wconf--list (&optional frame)
@@ -49,6 +57,10 @@
 
 (defsetf exwm-wconf--selected (&optional frame) (wconf)
   `(set-frame-parameter ,frame 'exwm-wconf ,wconf))
+
+(defun exwm-wconf--selected-p (wc)
+  "Return non-nil if WC is currently selected."
+  (eq wc (exwm-wconf--selected)))
 
 
 (defun exwm-wconf--recency-sorter (wc1 wc2)
@@ -65,8 +77,10 @@
     ;; If switching to new wconf then simple push, otherwise need to
     ;; update selected wconf
     (if (memq wconf (exwm-wconf--list))
-        (exwm-list--set-element
-         (exwm-wconf--list) (exwm-wconf--selected) (exwm-wconf--current))
+        (when (and exwm-wconf-autoupdate-predicate
+                   (funcall exwm-wconf-autoupdate-predicate wconf))
+          (exwm-list--set-element
+           (exwm-wconf--list) (exwm-wconf--selected) (exwm-wconf--current)))
       (pushnew wconf (exwm-wconf--list)))
 
     (set-window-configuration (caddr wconf))
@@ -82,6 +96,16 @@
     (if wc
         (exwm-wconf--switch wc)
       (switch-to-buffer buf))))
+
+(defun exwm-wconf--buffer-killed ()
+  "Kill wconf if its buffer has been killed."
+  (let* ((wlist (exwm-wconf--list))
+         (wconf (find (current-buffer) wlist :key #'car)))
+    (setf (exwm-wconf--list) (delq wconf wlist))
+
+    (when (exwm-wconf--selected-p wconf)
+      (setf (exwm-wconf--selected) nil)
+      (exwm-wconf-other 1))))
 
 
 ;;;###autoload
@@ -139,6 +163,17 @@
   (switch-to-buffer (car (exwm-wconf--selected))))
 
 ;;;###autoload
+(defun exwm-wconf-update ()
+  "Update wconf for selected conf."
+  (interactive)
+  (let ((wcur (exwm-wconf--current)))
+    (exwm-list--set-element
+     (exwm-wconf--list) (exwm-wconf--selected) wcur)
+    (setf (exwm-wconf--selected) wcur)
+
+    (run-hook-with-args 'exwm-wconf-switch-hook wcur)))
+
+;;;###autoload
 (defun exwm-wconf-transpose (arg)
   "Transpose selected wconf with the next one.
 If ARG is given, then transpose with previous one."
@@ -151,7 +186,17 @@ If ARG is given, then transpose with previous one."
       (run-hook-with-args 'exwm-wconf-switch-hook))))
 
 ;;; Tabbing
-(defvar exwm-wconf--tabs-enabled nil)
+(defvar exwm-wconf--header-prefix nil)
+(put 'exwm-wconf--header-prefix 'risky-local-variable t)
+
+(defvar exwm-wconf--header-string nil)
+(put 'exwm-wconf--header-string 'risky-local-variable t)
+
+(defvar exwm-wconf--header-title '(:eval (exwm-wconf--header-line)))
+(put 'exwm-wconf--header-title 'risky-local-variable t)
+
+(defvar exwm-wconf--header-line-format
+  '("%e" exwm-wconf--header-prefix exwm-wconf--header-title exwm-wconf--header-string))
 
 (defface exwm-wconf-active-face
   '((t :inherit mode-line               ; inherit background color
@@ -160,7 +205,39 @@ If ARG is given, then transpose with previous one."
   "Face for active wconf."
   :group 'exwm-wconf)
 
-(defvar exwm-wconf--header-line-format '("%e" (:eval (exwm-wconf--header-line))))
+(defmacro with-exwm-wconf-header-line (&rest forms)
+  "Apply mode-line activations to exwm-wconf's header line.
+Example:
+
+  (with-exwm-wconf-header-line
+    (display-time-mode 1))"
+  `(let ((global-mode-string exwm-wconf--header-string))
+        ,@forms
+        (setq exwm-wconf--header-string global-mode-string)))
+
+(defun exwm-wconf--format-title (wc maxsize)
+  (let* ((curp (eq (car wc) (current-buffer)))
+         (bufname (buffer-name (if (exwm-wconf--selected-p wc) (current-buffer) (car wc))))
+         (fs (format (format " %%-%ds" maxsize) bufname)))
+    (substring
+     (if (exwm-wconf--selected-p wc)
+         (concat
+          (if curp
+              ""
+            (propertize " \u273d" 'face '(error exwm-wconf-active-face)))
+          (propertize fs 'face 'exwm-wconf-active-face))
+       fs)
+     nil maxsize)))
+
+(defun exwm-wconf--fmt-ml-entry (mle)
+  (cond ((stringp mle) mle)             ;terminator
+        ((null mle) mle)
+        ((symbolp mle)
+         (exwm-wconf--fmt-ml-entry (symbol-value mle)))
+        ((and (listp mle) (eq :eval (car mle)))
+         (eval (cadr mle)))
+        ((listp mle)
+         (mapconcat #'identity (mapcar #'exwm-wconf--fmt-ml-entry mle) ""))))
 
 (defun exwm-wconf--header-line ()
   "Generate header line format for current wconf."
@@ -168,17 +245,12 @@ If ARG is given, then transpose with previous one."
          (wsel (exwm-wconf--selected))
          (wpsize (window-pixel-width))
          (hlsize (window-font-width nil 'header-line))
-         (tsize (/ (/ wpsize hlsize) (length wcs))))
-    (mapconcat 'identity
+         (hl-no-wconf (remq 'exwm-wconf--header-title exwm-wconf--header-line-format))
+         (hl-others (mapconcat 'identity (mapcar 'exwm-wconf--fmt-ml-entry hl-no-wconf) ""))
+         (tsize (/ (- (/ wpsize hlsize) (length hl-others)) (length wcs))))
+    (mapconcat #'identity
                (mapcar #'(lambda (wc)
-                           (let ((fs (format (format " %%-%ds" (1- tsize))
-                                             (buffer-name (if (eq wc wsel) (current-buffer) (car wc))))))
-                             (if (eq wc wsel)
-                                 (concat 
-                                  (if (eq (car wc) (current-buffer)) ""
-                                    (propertize " \u2731" 'face '(error exwm-wconf-active-face)))
-                                  (propertize fs 'face 'exwm-wconf-active-face))
-                               fs)))
+                           (exwm-wconf--format-title wc tsize))
                        wcs)
                "\u2502")))
 
@@ -202,6 +274,7 @@ If ARG is given, then transpose with previous one."
       (progn
         (add-hook 'exwm-wconf-switch-hook 'force-mode-line-update)
         (add-hook 'window-configuration-change-hook 'exwm-wconf--tabs-refresh)
+        (add-hook 'kill-buffer-hook 'exwm-wconf--buffer-killed)
         (exwm-wconf--tabs-refresh))
 
     (remove-hook 'exwm-wconf-switch-hook 'force-mode-line-update)

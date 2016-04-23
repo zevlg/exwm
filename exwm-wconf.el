@@ -171,8 +171,10 @@ If ARG is given, then transpose with previous one."
          (tsize (/ (/ wpsize hlsize) (length wcs))))
     (mapconcat 'identity
                (mapcar #'(lambda (wc)
-                           (let ((fs (format (format " %%-%ds" (1- tsize))
-                                             (buffer-name (if (eq wc wsel) (current-buffer) (car wc))))))
+                           (let ((fs (substring
+                                      (format (format " %%-%ds" (1- tsize))
+                                              (buffer-name (if (eq wc wsel) (current-buffer) (car wc))))
+                                      0 tsize)))
                              (if (eq wc wsel)
                                  (concat 
                                   (if (eq (car wc) (current-buffer)) ""
@@ -190,8 +192,10 @@ If ARG is given, then transpose with previous one."
     (mapc #'(lambda (w)
               (with-current-buffer (window-buffer w)
                 (if (eq (current-buffer) wbuf)
-                    (setq-local header-line-format exwm-wconf--header-line-format)
-                  (setq-local header-line-format nil))))
+                    (setq header-line-format exwm-wconf--header-line-format)
+
+                  (when (eq header-line-format exwm-wconf--header-line-format)
+                    (setq header-line-format nil)))))
           (window-list nil 0))))
 
 ;;;###autoload

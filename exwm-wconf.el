@@ -85,7 +85,8 @@
 
     (set-window-configuration (caddr wconf))
     ;; `set-window-buffer' updates buffer-display-time!
-    (set-window-buffer (selected-window) (car wconf))
+    (when (buffer-live-p (car wconf))
+      (set-window-buffer (selected-window) (car wconf)))
     (setf (exwm-wconf--selected) wconf)
 
     (run-hook-with-args 'exwm-wconf-switch-hook wconf)))
@@ -101,11 +102,12 @@
   "Kill wconf if its buffer has been killed."
   (let* ((wlist (exwm-wconf--list))
          (wconf (find (current-buffer) wlist :key #'car)))
-    (setf (exwm-wconf--list) (delq wconf wlist))
+    (when (exwm-match-p '(exwm-mode))
+      (setf (exwm-wconf--list) (delq wconf wlist))
 
-    (when (exwm-wconf--selected-p wconf)
-      (setf (exwm-wconf--selected) nil)
-      (exwm-wconf-other 1))))
+      (when (exwm-wconf--selected-p wconf)
+        (setf (exwm-wconf--selected) nil)
+        (exwm-wconf-other 1)))))
 
 
 ;;;###autoload

@@ -41,7 +41,7 @@ PREDICATE - Function to call with single argument - PARAM."
          exwm--qualifiers))
 
 ;;;###exwm-autoload
-(defun exwm--match-p (qualifier &optional buf)
+(defun exwm-match-p (qualifier &optional buf)
   "Check whether buffer BUF matches QUALIFIER.
 Here is QUALIFIER format in EBNF:
 
@@ -71,7 +71,7 @@ Here is QUALIFIER format in EBNF:
       (let (ao-res or)
         ;; Scan QUALIFIER for matching
         (while qualifier
-          (setq ao-res (exwm--match-p (car qualifier) buf))
+          (setq ao-res (exwm-match-p (car qualifier) buf))
           (if (or (and (eq ao-type 'and) (null ao-res))
                   (and (eq ao-type 'or) ao-res))
               ;; Break conditions, not-match or already matches
@@ -83,7 +83,7 @@ Here is QUALIFIER format in EBNF:
 
 (define-exwm-qualifier not (param)
   "Return non-nil if PARAM is false."
-  (not (exwm--match-p param)))
+  (not (exwm-match-p param)))
 
 (define-exwm-qualifier class-inst (param)
   "Return non-nil if PARAM matches class instance."
@@ -145,7 +145,7 @@ Predicate called without arguments."
   "Return non-nil if buffer's major-mode is PARAM."
   (eq major-mode param))
 
-(define-exwm-qualifier exwm-mode (param)
+(define-exwm-qualifier exwm-mode (&optional param)
   "Return non-nil if buffer in `exwm-mode'."
   (eq major-mode 'exwm-mode))
 
@@ -169,7 +169,7 @@ Predicate called without arguments."
 (defun exwm--list (qual &optional buffers)
   "List buffers matching qualifier QUAL."
   (remove-if-not #'(lambda (buf)
-                     (exwm--match-p qual buf))
+                     (exwm-match-p qual buf))
                  (or buffers (buffer-list))))
 
 (defun exwm--x-list (qual)
